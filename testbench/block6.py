@@ -28,15 +28,35 @@ class ExecAsyncHandler(threading.Thread):
         self.stdout = None
         self.stderr = None
         self.retcode = None
+        self.process = None
+        self.stop_flag = False
+        self.timer = 0
 
     def run(self, timeout=5):
-        self.log.info(f"Thread executing cmd: {self.cmd}")
-        process = subprocess.run(
-            self.cmd, capture_output=True, timeout=timeout)
-        self.stdout = process.stdout
-        self.stderr = process.stderr
-        self.retcode = process.returncode
+        self.log.info(f"Thread executing cmd: {' '.join(self.cmd)}")
+        self.process = subprocess.Popen(
+                self.cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
+        while not self.stop_flag:
+            if self.timer >= timeout:
+                self.stdout = self.process.stdout
+                self.stderr = self.process.stderr
+                self.retcode = -1
+                self.log.error(f"Timeout expired executing {' '.join(self.cmd)}")
+                break
+            try:
+                self.process.wait(0.2)
+                self.stdout = self.process.stdout
+                self.stderr = self.process.stderr
+                self.retcode = self.process.returncode
+                break
+            except subprocess.TimeoutExpired as ex:
+                self.log.debug("Timeout")
+                pass
+            self.timer += 0.2
+
+    def stop(self):
+        self.stop_flag = True
 
     def collect(self):
         while self.is_alive():
@@ -74,10 +94,9 @@ def pseudo_hash(key: bytes):
 
 class JoinAndFTTestCase(unittest.TestCase):
     expected_files = ['peer']
+    log = logging.getLogger(__name__)
 
     def start_peer(self, port, handler):
-
-
         q = queue.Queue()
 
         def run_peer():
@@ -112,21 +131,32 @@ class JoinAndFTTestCase(unittest.TestCase):
 
         return c
 
-    def start_student_peer(self, port: int, node_id, anchor_ip=None, anchor_port=None):
+    def start_student_peer(self, port: int, node_id, anchor_ip=None, anchor_port=None, self_ip="127.0.0.1"):
 
         peer_path = which('peer')
-        ip = "127.0.0.1"
 
         if anchor_port is not None and anchor_ip is not None:
             handler = exec_async(
-                [f'{peer_path}', f'{ip}', f'{port}', f'{node_id}',
-                 f'{anchor_ip}', f'{anchor_port}'])
+                [f'{peer_path}',
+                 "--self_ip", f'{self_ip}',
+                 "--self_port", f'{port}',
+                 "--self_id", f'{node_id}',
+                 "--anch_ip", f'{anchor_ip}',
+                 "--anch_port", f'{anchor_port}'
+                ])
         elif node_id is not None:
             handler = exec_async(
-                [f'{peer_path}', f'{ip}', f'{port}', f'{node_id}'])
+                [f'{peer_path}',
+                 "--self_ip", f'{self_ip}',
+                 "--self_port", f'{port}',
+                 "--self_id", f'{node_id}'
+                ])
         else:
             handler = exec_async(
-                [f'{peer_path}', f'{ip}', f'{port}'])
+                [f'{peer_path}',
+                "--self_ip", f'{self_ip}',
+                "--self_port", f'{port}',
+                ])
 
         return handler
 
@@ -147,16 +177,21 @@ class JoinAndFTTestCase(unittest.TestCase):
         return handlers, ports
 
     def test_trigger_join_minimal(self):
-        node_id = 42
-        anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
-        handler = self.start_student_peer(
-            1400, node_id, "127.0.0.1", 1400)
 
-        join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
+        # Start mock client on port 1400
+        anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
+
+        # Start student peer joining over anchor port 1400
+        handler = self.start_student_peer(
+            port=1401, node_id=42, anchor_ip="127.0.0.1", anchor_port=1400)
+
+        join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 1)
         if join_pkt is None:
             status, out, err = handler.collect()
             self.fail(
                 f"Did not receive a JOIN msg within timeout!")
+
+        handler.stop()
 
     # def test_join_correct(self):
     #     node_id = 42
@@ -482,11 +517,19 @@ def which(name):
     return f"{cwd}/build/{name}"
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    import custom_logging
+
     log = logging.getLogger(__name__)
+    log.info("Hello World")
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(custom_logging.CustomFormatter())
+
+    logging.basicConfig(level=logging.DEBUG, handlers=[ch])
+
 
     testobj = JoinAndFTTestCase()
-
     group = "testgroup"
     result_dir = os.getcwd()
     log.info(f"result_dir: {result_dir}")

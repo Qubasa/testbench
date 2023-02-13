@@ -12,6 +12,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     from packet import Packet, ControlPacket, DataPacket, NTPPacket
 
+log = logging.getLogger(__name__)
 
 class MockServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
@@ -21,7 +22,6 @@ class MockServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.queue = queue.Queue()
         self.resp_q = queue.Queue()
         self.send_response = False
-
         self.ip = "127.0.0.1"
 
 
