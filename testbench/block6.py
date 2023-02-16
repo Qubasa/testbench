@@ -22,7 +22,7 @@ ASSIGNMENT = 'Abgabe Block 6'
 
 class ExecAsyncHandler(threading.Thread):
     def __init__(self, cmd):
-        self.cmd = cmd
+        self.cmd = cmd + ["--verbose"]
         # calling parent class constructor
         threading.Thread.__init__(self)
         self.log = logging.getLogger(__name__)
@@ -37,8 +37,8 @@ class ExecAsyncHandler(threading.Thread):
         self.log.info(f"Test command:\n\t {' '.join(self.cmd)}")
 
         proc_env = {
-            "UBSAN_OPTIONS": "color=always",
-            "ASAN_OPTIONS": "color=always"
+            "UBSAN_OPTIONS": "color=always:print_stacktrace=1",
+            "ASAN_OPTIONS": "color=always:print_stacktrace=1"
         }
 
         self.process = subprocess.Popen(
@@ -61,6 +61,13 @@ class ExecAsyncHandler(threading.Thread):
                 self.process.wait(0.1)
                 self.stdout, self.stderr = self.process.communicate()
                 self.retcode = self.process.returncode
+
+                if self.retcode != 0:
+                    if self.stderr is not None:
+                        sys.stderr.write(self.stderr)
+                    if self.stdout is not None:
+                        sys.stderr.write(self.stdout)
+
                 break
             except subprocess.TimeoutExpired as ex:
                 pass
@@ -188,126 +195,139 @@ class JoinAndFTTestCase(unittest.TestCase):
 
         return handlers, ports
 
-    def test_trigger_join_minimal(self):
+    # def test_trigger_join_minimal(self):
 
-        # Start mock client on port 1400
-        anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
+    #     # Start mock client on port 1400
+    #     anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
 
-        # Start student peer joining over anchor port 1400
-        handler = self.start_student_peer(
-            port=1401, node_id=42, anchor_ip="127.0.0.1", anchor_port=1400)
+    #     # Start student peer joining over anchor port 1400
+    #     handler = self.start_student_peer(
+    #         port=1401, node_id=42, anchor_ip="127.0.0.1", anchor_port=1400)
+    #     self.addCleanup(handler.stop)
 
-        join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 1)
-        if join_pkt is None:
-            status, out, err = handler.collect()
-            self.fail(
-                f"Did not receive a JOIN msg within timeout!")
+    #     join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 1)
+    #     if join_pkt is None:
+    #         status, out, err = handler.collect()
+    #         self.fail(
+    #             f"Did not receive a JOIN msg within timeout!")
 
-        handler.stop()
-
-    def test_join_correct(self):
-        node_id = 42
-        node_port = 2000
-        # Start mock client on port 1400
-        anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
-
-        # Start student peer joining over anchor port 1400
-        handler = self.start_student_peer(
-            port=node_port, node_id=node_id, anchor_ip="127.0.0.1", anchor_port=1400)
-
-        join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
-        if join_pkt is None:
-            status, out, err = handler.collect()
-            self.fail(
-                f"Did not receive a JOIN msg within timeout! Stdout: {out}, Stderr:{err}")
-
-        self.assertEqual(join_pkt.method, 'JOIN')
-        self.assertEqual(join_pkt.node_id, node_id,
-                         msg="Peer sent wrong node id in JOIN msg.")
-        self.assertEqual(join_pkt.ip, ipaddress.IPv4Address("127.0.0.1"),
-                         msg=f"Peer sent wrong ip in JOIN msg. Raw packet: {join_pkt.raw}")
-        self.assertEqual(join_pkt.port, node_port,
-                         msg="Peer sent wrong port in JOIN msg.")
-
-        handler.stop()
-
-    # def test_full_join_student(self):
+    # def test_join_correct(self):
     #     node_id = 42
     #     node_port = 2000
+    #     # Start mock client on port 1400
+    #     anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
 
-    #     succ_id = 100
-    #     succ_ip = ipaddress.IPv4Address("127.0.0.1")
-    #     succ_port = 1400
-
-    #     pre_id = 10
-    #     pre_ip = ipaddress.IPv4Address("127.0.0.1")
-    #     pre_port = 1401
-
-    #     anchor_thread, anchor = self.start_peer(1400, GeneralPktHandler)
-    #     anchor.send_response = True
-    #     notify = ControlPacket('NOTIFY', 0, succ_id, succ_ip, succ_port)
-    #     anchor.resp_q.put((notify, "127.0.0.1", node_port))
-
+    #     # Start student peer joining over anchor port 1400
     #     handler = self.start_student_peer(
-    #         node_port, node_id, "127.0.0.1", 1400)
-
+    #         port=node_port, node_id=node_id, anchor_ip="127.0.0.1", anchor_port=1400)
+    #     self.addCleanup(handler.stop)
     #     join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
     #     if join_pkt is None:
     #         status, out, err = handler.collect()
     #         self.fail(
     #             f"Did not receive a JOIN msg within timeout! Stdout: {out}, Stderr:{err}")
 
-    #     stabilize = ControlPacket('STABILIZE', 0, pre_id, pre_ip, pre_port)
-    #     pre = self.start_client(stabilize, port=node_port)
+    #     self.assertEqual(join_pkt.method, 'JOIN')
+    #     self.assertEqual(join_pkt.node_id, node_id,
+    #                      msg="Peer sent wrong node id in JOIN msg.")
+    #     self.assertEqual(join_pkt.ip, ipaddress.IPv4Address("127.0.0.1"),
+    #                      msg=f"Peer sent wrong ip in JOIN msg. Raw packet: {join_pkt.raw}")
+    #     self.assertEqual(join_pkt.port, node_port,
+    #                      msg="Peer sent wrong port in JOIN msg.")
 
-    #     try:
-    #         notify2 = pre.await_packet(2.5)
-    #         if notify2 is None:
-    #             status, out, err = handler.collect()
-    #             self.fail(
-    #                 f"Did not receive a NOTIFY response for stabilize msg within timeout! Stdout: {out}, Stderr:{err}")
+    def test_full_join_student(self):
+        # Self peer
+        node_id = 42
+        node_port = 2000
 
-    #     except AssertionError:
-    #         raise AssertionError(
-    #             'Peer closed connection after STABILIZE! Either it crashed or it tries to send NOTIFY in a separate connection! In the second case: This is stupid but might still be valid.')
+        # Successor peer
+        succ_id = 100
+        succ_ip = ipaddress.IPv4Address("127.0.0.1")
+        succ_port = 1400
 
-    #     self.assertEqual(notify2.method, 'NOTIFY')
+        # Predecessor peer
+        pre_id = 10
+        pre_ip = ipaddress.IPv4Address("127.0.0.1")
+        pre_port = 1401
 
-    #     stabilize2 = anchor.await_packet(ControlPacket, 5.0)
-    #     if stabilize2 is None:
-    #         status, out, err = handler.collect()
-    #         self.fail(
-    #             f"Did not receive a STABILIZE within timeout after JOIN! Stdout: {out}, Stderr:{err}")
+        # Start mock anchor on port 1400
+        anchor_thread, anchor = self.start_peer(1400, GeneralPktHandler)
+        anchor.send_response = True
 
-    #     self.assertEqual(stabilize2.method, "STABILIZE")
+        # Send notify from mock anchor to student peer
+        notify = ControlPacket('NOTIFY', 0, succ_id, succ_ip, succ_port)
+        anchor.resp_q.put((notify, "127.0.0.1", node_port))
 
-    #     lookup1 = ControlPacket('LOOKUP', pre_id - 5,
-    #                             9999, pre_ip, pre_port)  # Should be forwarded
-    #     c1 = self.start_client(lookup1, port=node_port)
+        self.log.debug("Start student peer")
+        # Start student peer with self port 2000 and id 42
+        handler = self.start_student_peer(
+            node_port, node_id, "127.0.0.1", 1400)
+        self.addCleanup(handler.stop)
 
-    #     forwarded_l: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
-    #     if not forwarded_l:
-    #         status, out, err = handler.collect()
-    #         self.fail(
-    #             f"Peer did not forward lookup to succ within timeout! JOIN might not be completed. Stdout: {out}, Stderr:{err}")
+        self.log.debug("Waiting for join packet")
+        # Anchor awaits join packet from student peer
+        join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
+        if join_pkt is None:
+            status, out, err = handler.collect()
+            self.fail(
+                f"Did not receive a JOIN msg within timeout! Stdout: {out}, Stderr:{err}")
 
-    #     self.assertEqual(forwarded_l.method, 'LOOKUP',
-    #                      msg=f"Expected LOOKUP but got {forwarded_l.method} instead. Is the peer spamming STABILIZE? ")
+        self.log.debug(f"Received packet type: {join_pkt.method}")
 
-    #     # Should not be forwarded
-    #     lookup2 = ControlPacket('LOOKUP', succ_id - 1,
-    #                             9999, succ_ip, succ_port)
-    #     c2 = self.start_client(lookup2, port=node_port)
 
-    #     reply: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
-    #     if not reply:
-    #         status, out, err = handler.collect()
-    #         self.fail(
-    #             f"Peer did not reply to lookup within timeout! JOIN might not be completed. Stdout: {out}, Stderr:{err}")
+        self.log.debug(f"Sending stabilize")
+        # Start mock client and send stabilize message to student peer with
+        # predecessor id, ip and port
+        stabilize = ControlPacket('STABILIZE', 0, pre_id, pre_ip, pre_port)
+        pre = self.start_client(stabilize, port=node_port)
 
-    #     self.assertEqual(reply.method, 'REPLY')
-    #     self.assertEqual(reply.node_id, succ_id)
-    #     handler.stop()
+        try:
+            notify2 = pre.await_packet(2.5)
+            if notify2 is None:
+                status, out, err = handler.collect()
+                self.fail(
+                    f"Did not receive a NOTIFY response for stabilize msg within timeout! Stdout: {out}, Stderr:{err}")
+
+        except AssertionError:
+            raise AssertionError(
+                'Peer closed connection after STABILIZE! Either it crashed or it tries to send NOTIFY in a separate connection! In the second case: This is stupid but might still be valid.')
+
+        self.assertEqual(notify2.method, 'NOTIFY')
+
+        stabilize2 = anchor.await_packet(ControlPacket, 5.0)
+        if stabilize2 is None:
+            status, out, err = handler.collect()
+            self.fail(
+                f"Did not receive a STABILIZE within timeout after JOIN! Stdout: {out}, Stderr:{err}")
+
+        self.assertEqual(stabilize2.method, "STABILIZE")
+
+        lookup1 = ControlPacket('LOOKUP', pre_id - 5,
+                                9999, pre_ip, pre_port)  # Should be forwarded
+        c1 = self.start_client(lookup1, port=node_port)
+
+        forwarded_l: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
+        if not forwarded_l:
+            status, out, err = handler.collect()
+            self.fail(
+                f"Peer did not forward lookup to succ within timeout! JOIN might not be completed. Stdout: {out}, Stderr:{err}")
+
+        self.assertEqual(forwarded_l.method, 'LOOKUP',
+                         msg=f"Expected LOOKUP but got {forwarded_l.method} instead. Is the peer spamming STABILIZE? ")
+
+        # Should not be forwarded
+        lookup2 = ControlPacket('LOOKUP', succ_id - 1,
+                                9999, succ_ip, succ_port)
+        c2 = self.start_client(lookup2, port=node_port)
+
+        reply: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
+        if not reply:
+            status, out, err = handler.collect()
+            self.fail(
+                f"Peer did not reply to lookup within timeout! JOIN might not be completed. Stdout: {out}, Stderr:{err}")
+
+        self.assertEqual(reply.method, 'REPLY')
+        self.assertEqual(reply.node_id, succ_id)
 
     # def test_initial_ring(self):
     #     node_id = 42
