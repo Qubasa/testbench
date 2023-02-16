@@ -1,3 +1,4 @@
+import os
 import queue
 import ipaddress
 import time
@@ -33,39 +34,50 @@ class ExecAsyncHandler(threading.Thread):
         self.timer = 0
 
     def run(self, timeout=5):
-        self.log.info(f"Thread executing cmd: {' '.join(self.cmd)}")
+        self.log.info(f"Test command:\n\t {' '.join(self.cmd)}")
+
+        proc_env = {
+            "UBSAN_OPTIONS": "color=always",
+            "ASAN_OPTIONS": "color=always"
+        }
+
         self.process = subprocess.Popen(
-                self.cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.cmd,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=proc_env,
+            encoding="utf-8"
+        )
 
         while not self.stop_flag:
             if self.timer >= timeout:
-                self.stdout = self.process.stdout
-                self.stderr = self.process.stderr
                 self.retcode = -1
-                self.log.error(f"Timeout expired executing {' '.join(self.cmd)}")
+                self.process.kill()
+                self.stdout, self.stderr = self.process.communicate()
+                self.log.error(
+                    f"Timeout expired executing {' '.join(self.cmd)}")
                 break
             try:
-                self.process.wait(0.2)
-                self.stdout = self.process.stdout
-                self.stderr = self.process.stderr
+                self.process.wait(0.1)
+                self.stdout, self.stderr = self.process.communicate()
                 self.retcode = self.process.returncode
                 break
             except subprocess.TimeoutExpired as ex:
-                self.log.debug("Timeout")
                 pass
-            self.timer += 0.2
+            self.timer += 0.1
 
     def stop(self):
         self.stop_flag = True
 
     def collect(self):
         while self.is_alive():
-            time.sleep(0.2)
+            time.sleep(0.1)
 
-        sys.stderr.write(self.stderr.decode("utf-8"))
-        sys.stderr.write(self.stdout.decode("utf-8"))
+        sys.stderr.write(self.stderr)
+        sys.stderr.write(self.stdout)
 
         return self.retcode, self.stderr, self.stdout
+
 
 def exec_async(cmd):
     handler = ExecAsyncHandler(cmd)
@@ -143,20 +155,20 @@ class JoinAndFTTestCase(unittest.TestCase):
                  "--self_id", f'{node_id}',
                  "--anch_ip", f'{anchor_ip}',
                  "--anch_port", f'{anchor_port}'
-                ])
+                 ])
         elif node_id is not None:
             handler = exec_async(
                 [f'{peer_path}',
                  "--self_ip", f'{self_ip}',
                  "--self_port", f'{port}',
                  "--self_id", f'{node_id}'
-                ])
+                 ])
         else:
             handler = exec_async(
                 [f'{peer_path}',
-                "--self_ip", f'{self_ip}',
-                "--self_port", f'{port}',
-                ])
+                 "--self_ip", f'{self_ip}',
+                 "--self_port", f'{port}',
+                 ])
 
         return handler
 
@@ -193,26 +205,31 @@ class JoinAndFTTestCase(unittest.TestCase):
 
         handler.stop()
 
-    # def test_join_correct(self):
-    #     node_id = 42
-    #     node_port = 2000
-    #     anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
-    #     handler = self.start_student_peer(
-    #         node_port, node_id, "127.0.0.1", 1400)
+    def test_join_correct(self):
+        node_id = 42
+        node_port = 2000
+        # Start mock client on port 1400
+        anchor_thread, anchor = self.start_peer(1400, ControlPktHandler)
 
-    #     join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
-    #     if join_pkt is None:
-    #         status, out, err = handler.collect()
-    #         self.fail(
-    #             f"Did not receive a JOIN msg within timeout! Stdout: {out}, Stderr:{err}")
+        # Start student peer joining over anchor port 1400
+        handler = self.start_student_peer(
+            port=node_port, node_id=node_id, anchor_ip="127.0.0.1", anchor_port=1400)
 
-    #     self.assertEqual(join_pkt.method, 'JOIN')
-    #     self.assertEqual(join_pkt.node_id, node_id,
-    #                      msg="Peer sent wrong node id in JOIN msg.")
-    #     self.assertEqual(join_pkt.ip, ipaddress.IPv4Address("127.0.0.1"),
-    #                      msg=f"Peer sent wrong ip in JOIN msg. Raw packet: {join_pkt.raw}")
-    #     self.assertEqual(join_pkt.port, node_port,
-    #                      msg="Peer sent wrong port in JOIN msg.")
+        join_pkt: ControlPacket = anchor.await_packet(ControlPacket, 2.0)
+        if join_pkt is None:
+            status, out, err = handler.collect()
+            self.fail(
+                f"Did not receive a JOIN msg within timeout! Stdout: {out}, Stderr:{err}")
+
+        self.assertEqual(join_pkt.method, 'JOIN')
+        self.assertEqual(join_pkt.node_id, node_id,
+                         msg="Peer sent wrong node id in JOIN msg.")
+        self.assertEqual(join_pkt.ip, ipaddress.IPv4Address("127.0.0.1"),
+                         msg=f"Peer sent wrong ip in JOIN msg. Raw packet: {join_pkt.raw}")
+        self.assertEqual(join_pkt.port, node_port,
+                         msg="Peer sent wrong port in JOIN msg.")
+
+        handler.stop()
 
     # def test_full_join_student(self):
     #     node_id = 42
@@ -290,6 +307,7 @@ class JoinAndFTTestCase(unittest.TestCase):
 
     #     self.assertEqual(reply.method, 'REPLY')
     #     self.assertEqual(reply.node_id, succ_id)
+    #     handler.stop()
 
     # def test_initial_ring(self):
     #     node_id = 42
@@ -511,10 +529,11 @@ class TextTestResultWithSuccesses(unittest.TextTestResult):
         super(TextTestResultWithSuccesses, self).addSuccess(test)
         self.successes.append(test)
 
-import os
+
 def which(name):
     cwd = os.getcwd()
     return f"{cwd}/build/{name}"
+
 
 def main():
     import custom_logging
@@ -528,25 +547,23 @@ def main():
 
     logging.basicConfig(level=logging.DEBUG, handlers=[ch])
 
-
     testobj = JoinAndFTTestCase()
     group = "testgroup"
     result_dir = os.getcwd()
     log.info(f"result_dir: {result_dir}")
 
-    with open(os.path.join(result_dir, 'test.log'), 'w') as f:
-        runner = unittest.TextTestRunner(stream=f)
-        suite = unittest.defaultTestLoader.loadTestsFromModule(testobj)
+    runner = unittest.TextTestRunner(verbosity=2)
+    suite = unittest.defaultTestLoader.loadTestsFromModule(testobj)
 
-        res: TextTestResultWithSuccesses = runner.run(suite)
+    res: TextTestResultWithSuccesses = runner.run(suite)
 
-        fails = res.failures
-        fails.extend(res.errors)
+    fails = res.failures
+    fails.extend(res.errors)
 
-        if res.wasSuccessful() and len(res.skipped) == 0:
-            log.info(f'{group} passed all tests 😊')
-        elif res.wasSuccessful():
-            log.info(f'{group} passed all tests, but we skipped some! 😊')
+    if res.wasSuccessful() and len(res.skipped) == 0:
+        log.info(f'{group} passed all tests 😊')
+    elif res.wasSuccessful():
+        log.info(f'{group} passed all tests, but we skipped some! 😊')
 
 
 if __name__ == '__main__':
