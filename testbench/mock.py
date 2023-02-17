@@ -257,6 +257,7 @@ class GeneralPktHandler(socketserver.StreamRequestHandler):
             self.handle_data_packet(data)
 
         if self.server.send_response:
+            time.sleep(0.1)
             self.send_response()
 
 
