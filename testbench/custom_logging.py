@@ -8,9 +8,9 @@ class CustomFormatter(logging.Formatter):
     bold_red = "\x1b[31;1m"
     green = "\u001b[32m"
     blue = "\u001b[34m"
-    reset = "\x1b[0m"
 
     def format(color):
+        reset = "\x1b[0m"
         return f"%(asctime)s - %(name)s - {color} %(levelname)s {reset} - %(message)s (%(filename)s:%(lineno)d)"
 
     FORMATS = {
