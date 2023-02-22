@@ -7,7 +7,7 @@ setuptools.setup(
     packages=["testbench"],
     entry_points={
         'console_scripts': [
-            'testbench = testbench.test:main',
+            'testbench = testbench.testrunner:main',
         ]
     }
 )

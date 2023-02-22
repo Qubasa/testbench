@@ -1,0 +1,3 @@
+import testrunner
+
+testrunner.main()

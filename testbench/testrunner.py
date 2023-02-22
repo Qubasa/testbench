@@ -5,15 +5,38 @@ import subprocess
 import threading
 import sys
 from functools import wraps
+import traceback
 
-import custom_logging
+try:
+    import custom_logging
+except (ImportError, ModuleNotFoundError):
+    from . import custom_logging
 
 # Logging setup
 log = logging.getLogger(__name__)
 
+
+class TestFailed(object):
+    def __init__(self, failed):
+        self._failed = failed
+        self.lock = threading.RLock()
+
+    @property
+    def get_failed(self):
+        self.lock.acquire()
+        return self._failed
+        self.lock.release()
+
+
+    def set_failed(self, x):
+        self.lock.acquire()
+        self._failed = x
+        self.lock.release()
+
+
 # Test globals
 TEST_ARRAY = []
-TEST_FAILED = True
+TEST_FAILED = TestFailed(True)
 CLEANUP = []
 
 class TestFunc:
@@ -27,11 +50,17 @@ class TestFunc:
 
 
 def test(func):
+    global TEST_FAILED, CLEANUP, TEST_ARRAY
+
     @wraps(func)
     def wrapper(*args, **kwds):
         try:
             func(*args, **kwds)
             return None
+        except TypeError as ex:
+            log.fatal(f"Test function {func.__name__} signature needs a **kwarg argument.")
+            return ex
+
         except Exception as ex:
             return ex
 
@@ -41,8 +70,13 @@ def test(func):
 def cleanup(func):
     @wraps(func)
     def wrapper(*args, **kwds):
+        global TEST_FAILED, CLEANUP, TEST_ARRAY
         kwds["failure"] = TEST_FAILED
-        iterator = func(*args, **kwds)
+        try:
+            iterator = func(*args, **kwds)
+        except TypeError as ex:
+            log.fatal(f"Cleanup function {func.__name__} signature needs a **kwarg argument.")
+            exit(1)
         CLEANUP.append(iterator)
         return next(iterator)
     return wrapper
@@ -59,6 +93,8 @@ def assertEqual(a,b, msg=None):
 
 
 def main():
+    global TEST_FAILED, CLEANUP, TEST_ARRAY
+
     import argparse
     import importlib
 
@@ -67,8 +103,8 @@ def main():
                     description = 'Loads and executes tests')
 
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-t", "--test", nargs="?", action="append", default=["test"])
-    parser.add_argument("-bd", "--build_dir", action="store", type=argparse.FileType('r'), default="build")
+    parser.add_argument("-t", "--test", nargs="?", action="append")
+    parser.add_argument("-bd", "--build_dir", action="store",  default="build")
     args = parser.parse_args()
 
     if args.verbose:
@@ -81,23 +117,40 @@ def main():
         log.error(f"Build directory does not exist: {build_dir}")
         exit(1)
 
+
     # Import tests
     for test in args.test:
-        log.info(f"Importing test: ./{test}.py")
-        importlib.import_module("." + test)
+        script_path = os.path.join(os.getcwd(), test)
+        script_dir = os.path.dirname(script_path)
+        sys.path.append(script_dir)
+        log.info(f"Loading test: {test}")
+        try:
+            mod = importlib.import_module(test)
+        except ModuleNotFoundError as ex:
+            log.error(f"Couldn't find module: {script_path}")
+            exit(1)
+        finally:
+            sys.path.pop()
 
+    if len(TEST_ARRAY) == 0:
+        log.error("No tests have been found!")
+        exit(1)
 
     width, height = os.get_terminal_size()
     for test in TEST_ARRAY:
         filler = round((width - len(test.func_name)) / 2 -1)
         print("="*filler + f" {test.func_name} " + "="*filler)
-        res = test.run(build_dir)
+
+        # Test execution phase
+        res = test.run(build_dir=build_dir)
         if res is not None:
             log.exception("Test failed. Reason: ", exc_info=res)
-            TEST_FAILED = True
+            TEST_FAILED.set_failed(True)
         else:
             log.info("Test succeeded")
-            TEST_FAILED = False
+            TEST_FAILED.set_failed(False)
+
+        # Cleanup phase
         for clean_func in CLEANUP:
             log.debug(f"Cleaning up function: {clean_func.__name__} ")
             try:

@@ -30,6 +30,6 @@ class CustomFormatter(logging.Formatter):
 def register(level):
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
-    ch.setFormatter(custom_logging.CustomFormatter())
+    ch.setFormatter(CustomFormatter())
     logging.basicConfig(level=level, handlers=[ch])
 
