@@ -56,8 +56,15 @@ class ExecAsyncHandler(threading.Thread):
         self.stdout, self.stderr = self.process.communicate()
         self.retcode = self.process.returncode
 
-    def stop(self):
+    def stop(self, print_output):
         self.stop_flag = True
+
+        if print_output:
+            self.collect()
+            if self.stdout is not None:
+                sys.stderr.write(self.stdout)
+            if self.stderr is not None:
+                sys.stderr.write(self.stderr)
 
     def collect(self):
         while self.is_alive():
