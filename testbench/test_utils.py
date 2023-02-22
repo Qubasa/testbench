@@ -19,7 +19,7 @@ class ExecAsyncHandler(threading.Thread):
         self.timer = 0
 
     def run(self, timeout=5):
-        self.log.info(f"Test command:\n\t {' '.join(self.cmd)}")
+        self.log.debug(f"Executing:\n\t {' '.join(self.cmd)}")
 
         proc_env = {
             "UBSAN_OPTIONS": "color=always:print_stacktrace=1",

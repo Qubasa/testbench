@@ -25,3 +25,11 @@ class CustomFormatter(logging.Formatter):
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
+
+
+def register(level):
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(custom_logging.CustomFormatter())
+    logging.basicConfig(level=level, handlers=[ch])
+
