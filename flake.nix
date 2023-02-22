@@ -6,7 +6,7 @@
       supportedSystems = [ "x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       pkgs = forAllSystems (system: nixpkgs.legacyPackages.${system});
-      myapp = forAllSystems (system: pkgs.${system}.poetry2nix.mkPoetryApplication { projectDir = self; });
+
     in
     rec {
       packages = forAllSystems (system: {
@@ -34,9 +34,9 @@
             pypkgs = pkgs.${system}.python310Packages;
           in
           pkgs.${system}.mkShellNoCC {
-          packages = with spkgs; [
+            packages = with spkgs; [
 
-          ];
+            ];
         };
       });
     };
