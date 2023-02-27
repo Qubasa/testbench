@@ -98,7 +98,6 @@ def main():
     import argparse
     import importlib
     import pathlib
-    import pdb
 
     parser = argparse.ArgumentParser(
                     prog = 'testbench',
@@ -107,6 +106,7 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-t", "--test", nargs="?", required=True, action="append")
     parser.add_argument("-bd", "--build_dir", action="store",  default="build")
+    parser.add_argument("-tf", "--test_func", nargs="?", action="append")
     args = parser.parse_args()
 
     if args.verbose:
@@ -119,6 +119,11 @@ def main():
         log.error(f"Build directory does not exist: {build_dir}")
         exit(1)
 
+    whitelist = set()
+    if args.test_func is not None:
+        for func in args.test_func:
+            whitelist.add(func)
+
     # Import tests
     for test_path in args.test:
         sp = pathlib.Path(test_path)
@@ -130,9 +135,8 @@ def main():
         try:
             mod = importlib.import_module(test_stem)
         except ModuleNotFoundError as ex:
-            log.error(f"Couldn't find module: {test_stem}")
             log.error(f"Module search path is: {script_dir}")
-            pdb.set_trace()
+            log.error(f"Couldn't load module: {test_stem}", exc_info=ex)
             exit(1)
         finally:
             sys.path.pop()
@@ -142,12 +146,15 @@ def main():
         exit(1)
 
     width, height = os.get_terminal_size()
-    for test_stem in TEST_ARRAY:
-        filler = round((width - len(test_stem.func_name)) / 2 -1)
-        print("="*filler + f" {test_stem.func_name} " + "="*filler)
+    for test in TEST_ARRAY:
+        if test.func_name not in whitelist and len(whitelist) > 0:
+            continue
+
+        filler = round((width - len(test.func_name)) / 2 -1)
+        print("="*filler + f" {test.func_name} " + "="*filler)
 
         # Test execution phase
-        res = test_stem.run(build_dir=build_dir)
+        res = test.run(build_dir=build_dir)
         if res is not None:
             log.exception("Test failed. Reason: ", exc_info=res)
             TEST_FAILED.set_failed(True)
