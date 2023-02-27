@@ -97,7 +97,8 @@ def main():
 
     import argparse
     import importlib
-    import pathlib 
+    import pathlib
+    import pdb
 
     parser = argparse.ArgumentParser(
                     prog = 'testbench',
@@ -121,9 +122,8 @@ def main():
     # Import tests
     for test_path in args.test:
         sp = pathlib.Path(test_path)
-        script_path = sp.with_suffix("").resolve()
-        script_dir = script_path.parent
-        sys.path.append("tests")
+        script_dir = sp.with_suffix("").resolve().parent.as_posix()
+        sys.path.append(script_dir)
 
         test_stem = sp.stem
         log.info(f"Loading test: {test_stem}")
@@ -132,6 +132,7 @@ def main():
         except ModuleNotFoundError as ex:
             log.error(f"Couldn't find module: {test_stem}")
             log.error(f"Module search path is: {script_dir}")
+            pdb.set_trace()
             exit(1)
         finally:
             sys.path.pop()
