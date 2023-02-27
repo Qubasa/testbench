@@ -97,13 +97,14 @@ def main():
 
     import argparse
     import importlib
+    import pathlib 
 
     parser = argparse.ArgumentParser(
                     prog = 'testbench',
                     description = 'Loads and executes tests')
 
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-t", "--test", nargs="?", action="append")
+    parser.add_argument("-t", "--test", nargs="?", required=True, action="append")
     parser.add_argument("-bd", "--build_dir", action="store",  default="build")
     args = parser.parse_args()
 
@@ -117,17 +118,20 @@ def main():
         log.error(f"Build directory does not exist: {build_dir}")
         exit(1)
 
-
     # Import tests
-    for test in args.test:
-        script_path = os.path.join(os.getcwd(), test)
-        script_dir = os.path.dirname(script_path)
-        sys.path.append(script_dir)
-        log.info(f"Loading test: {test}")
+    for test_path in args.test:
+        sp = pathlib.Path(test_path)
+        script_path = sp.with_suffix("").resolve()
+        script_dir = script_path.parent
+        sys.path.append("tests")
+
+        test_stem = sp.stem
+        log.info(f"Loading test: {test_stem}")
         try:
-            mod = importlib.import_module(test)
+            mod = importlib.import_module(test_stem)
         except ModuleNotFoundError as ex:
-            log.error(f"Couldn't find module: {script_path}")
+            log.error(f"Couldn't find module: {test_stem}")
+            log.error(f"Module search path is: {script_dir}")
             exit(1)
         finally:
             sys.path.pop()
@@ -137,12 +141,12 @@ def main():
         exit(1)
 
     width, height = os.get_terminal_size()
-    for test in TEST_ARRAY:
-        filler = round((width - len(test.func_name)) / 2 -1)
-        print("="*filler + f" {test.func_name} " + "="*filler)
+    for test_stem in TEST_ARRAY:
+        filler = round((width - len(test_stem.func_name)) / 2 -1)
+        print("="*filler + f" {test_stem.func_name} " + "="*filler)
 
         # Test execution phase
-        res = test.run(build_dir=build_dir)
+        res = test_stem.run(build_dir=build_dir)
         if res is not None:
             log.exception("Test failed. Reason: ", exc_info=res)
             TEST_FAILED.set_failed(True)
