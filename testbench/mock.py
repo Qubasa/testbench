@@ -6,6 +6,7 @@ import sys
 import select
 import socket
 import logging
+import time
 
 try:
     from .packet import Packet, ControlPacket, DataPacket, NTPPacket

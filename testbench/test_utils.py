@@ -21,7 +21,7 @@ class ExecAsyncHandler(threading.Thread):
         self.timer = 0
 
     def run(self):
-        self.log.debug(f"Executing:\n\t {' '.join(self.cmd)}")
+        self.log.debug(f"Executing: {self.cmd_str}")
 
         # Add :verbosity=1 to debug ubsan and asan
         proc_env = {
@@ -44,19 +44,20 @@ class ExecAsyncHandler(threading.Thread):
                 self.stdout, self.stderr = self.process.communicate()
 
                 self.log.error(
-                    f"Timeout expired executing {' '.join(self.cmd)}")
+                    f"Timeout expired executing {self.cmd_str}")
                 return
             try:
                 self.process.wait(0.1)
                 self.stdout, self.stderr = self.process.communicate()
                 self.retcode = self.process.returncode
-
+                self.log.debug(f"Process returned {self.retcode}")
                 return
             except subprocess.TimeoutExpired as ex:
                 pass
             self.timer += 0.1
 
         # if stop flag has been set
+        self.log.debug(f"Killing process {self.cmd_str}")
         self.process.kill()
         self.stdout, self.stderr = self.process.communicate()
         self.retcode = self.process.returncode
@@ -68,6 +69,10 @@ class ExecAsyncHandler(threading.Thread):
         except ValueError:
             return None
 
+    @property
+    def cmd_str(self):
+        d = [os.path.basename(self.cmd[0])] + self.cmd[1:]
+        return f"./{' '.join(d)}"
 
     def stop(self):
         self.stop_flag = True
@@ -79,8 +84,7 @@ class ExecAsyncHandler(threading.Thread):
         if self.stderr is not None:
             sys.stderr.write(self.stderr)
         if self.retcode != 0:
-            d = [os.path.basename(self.cmd[0])] + self.cmd[1:]
-            sys.stderr.write(f"{self.sig_name}: Returncode {self.retcode}: ./{' '.join(d)}\n")
+            sys.stderr.write(f"{self.sig_name}: Returncode {self.retcode}: {self.cmd_str}\n")
 
     def collect(self):
         while self.is_alive():

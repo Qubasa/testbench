@@ -38,6 +38,7 @@ class TestFailed(object):
 TEST_ARRAY = []
 TEST_FAILED = TestFailed(True)
 CLEANUP = []
+DEBUG = False
 
 class TestFunc:
     def __init__(self, wrapper, func_name, result=None):
@@ -94,11 +95,11 @@ def assertEqual(a,b, msg=None):
 
 def get_term_filler(name):
     width, height = os.get_terminal_size()
-    filler = round((width - len(name)) / 2 -1)
+    filler = round((width - len(name)) / 2 -2)
     return filler
 
 def main():
-    global TEST_FAILED, CLEANUP, TEST_ARRAY
+    global TEST_FAILED, CLEANUP, TEST_ARRAY, DEBUG
 
     import argparse
     import importlib
@@ -112,7 +113,10 @@ def main():
     parser.add_argument("-t", "--test", nargs="?", required=True, action="append")
     parser.add_argument("-bd", "--build_dir", action="store",  default="build")
     parser.add_argument("-tf", "--test_func", nargs="?", action="append")
+   # parser.add_argument("-d", "--debug", action="store_true")
     args = parser.parse_args()
+
+   # DEBUG = args.debug
 
     if args.verbose:
         custom_logging.register(logging.DEBUG)
@@ -150,7 +154,7 @@ def main():
         log.error("No tests have been found!")
         exit(1)
 
-    for test in TEST_ARRAY:
+    for i, test in enumerate(TEST_ARRAY):
         if test.func_name not in whitelist and len(whitelist) > 0:
             continue
 
@@ -175,7 +179,9 @@ def main():
                 log.error("Failed to cleanup. Zombie processes may be still alive")
             except StopIteration:
                 pass
-        time.sleep(1)
+        # Skip wait if last test function
+        if i != len(TEST_ARRAY)-1:
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
