@@ -92,6 +92,11 @@ def assertEqual(a,b, msg=None):
 
 
 
+def get_term_filler(name):
+    width, height = os.get_terminal_size()
+    filler = round((width - len(name)) / 2 -1)
+    return filler
+
 def main():
     global TEST_FAILED, CLEANUP, TEST_ARRAY
 
@@ -145,12 +150,11 @@ def main():
         log.error("No tests have been found!")
         exit(1)
 
-    width, height = os.get_terminal_size()
     for test in TEST_ARRAY:
         if test.func_name not in whitelist and len(whitelist) > 0:
             continue
 
-        filler = round((width - len(test.func_name)) / 2 -1)
+        filler = get_term_filler(test.func_name)
         print("="*filler + f" {test.func_name} " + "="*filler)
 
         # Test execution phase
@@ -171,6 +175,7 @@ def main():
                 log.error("Failed to cleanup. Zombie processes may be still alive")
             except StopIteration:
                 pass
+        time.sleep(1)
 
 if __name__ == "__main__":
     main()
