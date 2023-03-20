@@ -41,6 +41,7 @@ class ExecAsyncHandler(threading.Thread):
             if self.timer >= self.timeout:
                 self.retcode = -1
                 self.process.kill()
+                self.process.wait(3)
                 self.stdout, self.stderr = self.process.communicate()
 
                 self.log.error(
@@ -59,6 +60,7 @@ class ExecAsyncHandler(threading.Thread):
         # if stop flag has been set
         self.log.debug(f"Killing process {self.cmd_str}")
         self.process.kill()
+        self.process.wait(3)
         self.stdout, self.stderr = self.process.communicate()
         self.retcode = self.process.returncode
 
