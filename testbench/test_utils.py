@@ -65,7 +65,7 @@ class ExecAsyncHandler(threading.Thread):
     @property
     def sig_name(self):
         try:
-            return signal.Signals(self.retcode).name
+            return signal.Signals(abs(self.retcode)).name
         except ValueError:
             return None
 

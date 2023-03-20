@@ -154,22 +154,7 @@ def main():
         log.error("No tests have been found!")
         exit(1)
 
-    for i, test in enumerate(TEST_ARRAY):
-        if test.func_name not in whitelist and len(whitelist) > 0:
-            continue
-
-        filler = get_term_filler(test.func_name)
-        print("="*filler + f" {test.func_name} " + "="*filler)
-
-        # Test execution phase
-        res = test.run(build_dir=build_dir)
-        if res is not None:
-            log.exception("Test failed. Reason: ", exc_info=res)
-            TEST_FAILED.set_failed(True)
-        else:
-            log.info("Test succeeded")
-            TEST_FAILED.set_failed(False)
-
+    def run_cleanup():
         # Cleanup phase
         for clean_func in CLEANUP:
             log.debug(f"Cleaning up function: {clean_func.__name__} ")
@@ -179,9 +164,39 @@ def main():
                 log.error("Failed to cleanup. Zombie processes may be still alive")
             except StopIteration:
                 pass
-        # Skip wait if last test function
-        if i != len(TEST_ARRAY)-1:
-            time.sleep(1)
+
+
+    try:
+        for i, test in enumerate(TEST_ARRAY):
+            if test.func_name not in whitelist and len(whitelist) > 0:
+                continue
+
+            filler = get_term_filler(test.func_name)
+            print("="*filler + f" {test.func_name} " + "="*filler)
+
+            # Test execution phase
+            res = test.run(build_dir=build_dir)
+            if res is not None:
+                log.exception("Test failed. Reason: ", exc_info=res)
+                TEST_FAILED.set_failed(True)
+            else:
+                log.info("Test succeeded")
+                TEST_FAILED.set_failed(False)
+
+            # Run cleanup functions
+            run_cleanup()
+
+            # Skip wait if last test function
+            if i != len(TEST_ARRAY)-1:
+                time.sleep(1)
+    except KeyboardInterrupt:
+        while True:
+            try:
+                run_cleanup()
+                exit(0)
+            except KeyboardInterrupt:
+                log.error("Please wait for the cleanup to finish")
+
 
 if __name__ == "__main__":
     main()
