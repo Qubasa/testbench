@@ -1,4 +1,5 @@
 import logging
+import datetime
 
 class CustomFormatter(logging.Formatter):
 
@@ -21,9 +22,15 @@ class CustomFormatter(logging.Formatter):
         logging.CRITICAL: format_str(bold_red)
     }
 
+    def formatTime(self, record,datefmt=None):
+        now = datetime.datetime.now()
+        now = now.strftime("%H:%M:%S")
+        return now
+
     def format(self, record):
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
+        formatter.formatTime = self.formatTime
         return formatter.format(record)
 
 
